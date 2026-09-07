@@ -19,21 +19,24 @@ npm run dev
 
 Then open the URL Vite prints (usually `http://localhost:5173`).
 
+`npm run typecheck` runs the TypeScript compiler with no emit; `npm run build` type-checks
+then produces a production build.
+
 ## Project structure
 
 ```
 parapet-app/
-├── index.html          entry HTML, loads src/main.jsx
+├── index.html          entry HTML, loads src/main.tsx
 ├── src/
-│   ├── main.jsx         React root
-│   └── App.jsx           the entire app: nav, ticker tape, landing page,
+│   ├── main.tsx         React root
+│   └── App.tsx           the entire app: nav, ticker tape, landing page,
 │                          markets table, dashboard, borrow/supply modal
 ├── contracts/           local Aave V3-based lending market (Foundry) — see below
 ├── package.json
-└── vite.config.js
+└── vite.config.ts
 ```
 
-Everything lives in `src/App.jsx` for now — it's organized into clearly separated
+Everything lives in `src/App.tsx` for now — it's organized into clearly separated
 components (Nav, TickerTape, Hero, Overview sections, Markets, Dashboard, ActionModal)
 that would be natural to split into their own files as the project grows.
 
@@ -48,7 +51,7 @@ that would be natural to split into their own files as the project grows.
 ## Contracts
 
 `contracts/` is a Foundry project that deploys a real (locally-run, test-only) Aave V3
-instance configured to match `ASSETS` in App.jsx exactly: USDG is the only borrowable
+instance configured to match `ASSETS` in App.tsx exactly: USDG is the only borrowable
 asset, every tokenized stock/ETF is collateral-only. This is what gives the front end's
 single cross-asset health factor real on-chain meaning — Aave aggregates a user's
 collateral and debt across every reserve natively.
@@ -66,7 +69,7 @@ Not deployed anywhere live, not audited, no real funds — see `CLAUDE.md` for d
 
 - Wire up an actual wallet connector (wagmi / viem) against Robinhood Chain (chain ID 4663)
 - Replace the mock `ASSETS` array with live prices from a Chainlink or Pyth feed
-- Split `App.jsx` into per-component files once the UI stabilizes
+- Split `App.tsx` into per-component files once the UI stabilizes
 - Get the contracts in `contracts/` reviewed/audited before any live deployment
 
 ## Disclosure

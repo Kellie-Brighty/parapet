@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   ArrowRight, Wallet, Check, ShieldCheck, TrendingUp, TrendingDown, AlertTriangle, X,
-  ChevronRight, ChevronDown, Lock, Eye, Zap, Layers, Plus, Minus,
+  ChevronRight, Lock, Eye, Zap, Layers, Plus, Minus,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ const C = {
   red: "#FF5C5C",
 };
 
-function riskColor(hf) {
+function riskColor(hf: number): string {
   if (hf === Infinity) return C.brand;
   if (hf >= 1.5) return C.brand;
   if (hf >= 1.1) return C.amber;
@@ -33,7 +33,23 @@ function riskColor(hf) {
 // ---------------------------------------------------------------------------
 // Market data
 // ---------------------------------------------------------------------------
-const ASSETS = [
+interface Asset {
+  id: string;
+  ticker: string;
+  name: string;
+  price: number;
+  isStable?: boolean;
+  supplyAPY: number;
+  borrowAPY: number;
+  maxLTV: number;
+  liqThreshold: number;
+  totalSupplied: number;
+  totalBorrowed: number;
+  accent: string;
+  chg: number;
+}
+
+const ASSETS: Asset[] = [
   { id: "usdg", ticker: "USDG", name: "Global Dollar", price: 1.0, isStable: true, supplyAPY: 0.042, borrowAPY: 0.068, maxLTV: 0, liqThreshold: 0, totalSupplied: 18_400_000, totalBorrowed: 9_700_000, accent: "#8D948C", chg: 0.0 },
   { id: "spy", ticker: "SPY", name: "S&P 500 ETF", price: 659.4, supplyAPY: 0.002, borrowAPY: 0.036, maxLTV: 0.78, liqThreshold: 0.84, totalSupplied: 3_100_000, totalBorrowed: 640_000, accent: "#7FA1C2", chg: 0.42 },
   { id: "aapl", ticker: "AAPL", name: "Apple", price: 231.5, supplyAPY: 0.003, borrowAPY: 0.046, maxLTV: 0.68, liqThreshold: 0.75, totalSupplied: 2_640_000, totalBorrowed: 710_000, accent: "#C9CBC7", chg: -0.18 },
@@ -45,20 +61,20 @@ const ASSETS = [
   { id: "jnj", ticker: "JNJ", name: "Johnson & Johnson", price: 164.9, supplyAPY: 0.0025, borrowAPY: 0.039, maxLTV: 0.74, liqThreshold: 0.8, totalSupplied: 980_000, totalBorrowed: 160_000, accent: "#6BB08A", chg: 0.14 },
 ];
 
-const byId = Object.fromEntries(ASSETS.map((a) => [a.id, a]));
+const byId: Record<string, Asset> = Object.fromEntries(ASSETS.map((a) => [a.id, a]));
 
-function fmtUSD(n, d = 0) {
+function fmtUSD(n: number, d = 0): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: d, maximumFractionDigits: d });
 }
-function fmtPrice(n) {
+function fmtPrice(n: number): string {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function pct(n, d = 1) {
+function pct(n: number, d = 1): string {
   return `${(n * 100).toFixed(d)}%`;
 }
-function shortHash(seed) {
+function shortHash(seed: number): string {
   const chars = "0123456789abcdef";
   let out = "0x";
   let s = seed >>> 0 || 1;
@@ -72,7 +88,21 @@ function shortHash(seed) {
 // ---------------------------------------------------------------------------
 // Portfolio math
 // ---------------------------------------------------------------------------
-function computePosition(supplies, borrows) {
+type Balances = Record<string, number>;
+
+interface Position {
+  collateralValue: number;
+  borrowLimit: number;
+  liqValue: number;
+  suppliedValue: number;
+  borrowedValue: number;
+  healthFactor: number;
+  borrowPowerUsed: number;
+  netWorth: number;
+  netAPY: number;
+}
+
+function computePosition(supplies: Balances, borrows: Balances): Position {
   let collateralValue = 0, borrowLimit = 0, liqValue = 0, suppliedValue = 0, supplyYield = 0;
 
   Object.entries(supplies).forEach(([id, amt]) => {
@@ -108,7 +138,7 @@ function computePosition(supplies, borrows) {
 // ---------------------------------------------------------------------------
 // Logo mark — a crenellated wall (a literal parapet), reads clean at any size
 // ---------------------------------------------------------------------------
-function Mark({ size = 22, color = C.brand }) {
+function Mark({ size = 22, color = C.brand }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <rect x="3" y="11" width="18" height="9" rx="1" fill={color} />
@@ -122,7 +152,7 @@ function Mark({ size = 22, color = C.brand }) {
 // ---------------------------------------------------------------------------
 // Animated count-up number
 // ---------------------------------------------------------------------------
-function useCountUp(target, duration = 900, decimals = 0) {
+function useCountUp(target: number, duration = 900, decimals = 0): string {
   const [val, setVal] = useState(0);
   const started = useRef(false);
   useEffect(() => {
@@ -130,7 +160,7 @@ function useCountUp(target, duration = 900, decimals = 0) {
     started.current = true;
     const start = performance.now();
     const from = 0;
-    function tick(now) {
+    function tick(now: number) {
       const t = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
       setVal(from + (target - from) * eased);
@@ -144,13 +174,31 @@ function useCountUp(target, duration = 900, decimals = 0) {
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
+type TabId = "overview" | "markets" | "dashboard";
+type ActionMode = "supply" | "borrow";
+
+interface ModalState {
+  mode: ActionMode;
+  assetId: string;
+}
+
+interface ActivityEntry {
+  id: number;
+  mode: ActionMode;
+  ticker: string;
+  amount: number;
+  valueUSD: number;
+  hash: string;
+  time: string;
+}
+
 export default function Parapet() {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState<TabId>("overview");
   const [connected, setConnected] = useState(false);
-  const [supplies, setSupplies] = useState({});
-  const [borrows, setBorrows] = useState({});
-  const [activity, setActivity] = useState([]);
-  const [modal, setModal] = useState(null);
+  const [supplies, setSupplies] = useState<Balances>({});
+  const [borrows, setBorrows] = useState<Balances>({});
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [modal, setModal] = useState<ModalState | null>(null);
 
   const position = useMemo(() => computePosition(supplies, borrows), [supplies, borrows]);
 
@@ -159,7 +207,7 @@ export default function Parapet() {
     setTab("dashboard");
   }
 
-  function confirmAction(assetId, mode, amount) {
+  function confirmAction(assetId: string, mode: ActionMode, amount: number) {
     const a = byId[assetId];
     if (mode === "supply") {
       setSupplies((s) => ({ ...s, [assetId]: (s[assetId] || 0) + amount }));
@@ -215,8 +263,8 @@ export default function Parapet() {
 }
 
 // ---------------------------------------------------------------------------
-function Nav({ tab, setTab, connected, onConnect }) {
-  const items = [
+function Nav({ tab, setTab, connected, onConnect }: { tab: TabId; setTab: (tab: TabId) => void; connected: boolean; onConnect: () => void }) {
+  const items: { id: TabId; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "markets", label: "Markets" },
     { id: "dashboard", label: "Dashboard" },
@@ -271,7 +319,6 @@ function Nav({ tab, setTab, connected, onConnect }) {
 
 // ---------------------------------------------------------------------------
 function TickerTape() {
-  const row = [...ASSETS, ...ASSETS].filter((a) => !a.isStable || true);
   return (
     <div style={{ borderBottom: `1px solid ${C.line}`, background: C.panel, overflow: "hidden", whiteSpace: "nowrap" }}>
       <div style={{ display: "inline-flex", animation: "marquee 34s linear infinite" }}>
@@ -295,7 +342,7 @@ function TickerTape() {
 }
 
 // ---------------------------------------------------------------------------
-function Overview({ onLaunch, onViewMarkets }) {
+function Overview({ onLaunch, onViewMarkets }: { onLaunch: () => void; onViewMarkets: () => void }) {
   const tvl = ASSETS.reduce((s, a) => s + a.totalSupplied, 0);
   const totalBorrowed = ASSETS.reduce((s, a) => s + a.totalBorrowed, 0);
   const tvlDisplay = useCountUp(tvl / 1_000_000, 1100, 2);
@@ -377,7 +424,7 @@ function Overview({ onLaunch, onViewMarkets }) {
 }
 
 // ---------------------------------------------------------------------------
-function Hero({ onLaunch, onViewMarkets, tvlDisplay, borrowedDisplay }) {
+function Hero({ onLaunch, onViewMarkets, tvlDisplay, borrowedDisplay }: { onLaunch: () => void; onViewMarkets: () => void; tvlDisplay: string; borrowedDisplay: string }) {
   return (
     <div style={{ position: "relative", padding: "72px 0 56px", overflow: "hidden" }}>
       <div style={{
@@ -481,7 +528,7 @@ function HeroCard() {
 }
 
 // ---------------------------------------------------------------------------
-function Section({ label, action, children }) {
+function Section({ label, action, children }: { label: string; action?: { label: string; onClick: () => void }; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 56 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
@@ -497,7 +544,7 @@ function Section({ label, action, children }) {
   );
 }
 
-function FeatureCard({ icon, title, body }) {
+function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: "18px 20px" }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(0,200,5,0.12)", color: C.brand, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
@@ -509,7 +556,7 @@ function FeatureCard({ icon, title, body }) {
   );
 }
 
-function Step({ n, title, body }) {
+function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
     <div style={{ position: "relative", paddingTop: 0, paddingRight: 20 }}>
       <div className="num" style={{
@@ -577,7 +624,7 @@ function FAQ() {
   );
 }
 
-function Footer({ setTab }) {
+function Footer({ setTab }: { setTab: (tab: TabId) => void }) {
   return (
     <div style={{ borderTop: `1px solid ${C.line}` }}>
       <div style={{ maxWidth: 1040, margin: "0 auto", padding: "40px 24px 28px" }}>
@@ -617,7 +664,7 @@ function Footer({ setTab }) {
   );
 }
 
-function FooterLink({ onClick, children }) {
+function FooterLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick} style={{ background: "none", border: "none", color: C.fog, fontSize: 13, textAlign: "left", cursor: "pointer", padding: 0 }}>
       {children}
@@ -626,7 +673,7 @@ function FooterLink({ onClick, children }) {
 }
 
 // ---------------------------------------------------------------------------
-function Markets({ onOpenModal, connected, onConnect }) {
+function Markets({ onOpenModal, connected, onConnect }: { onOpenModal: (modal: ModalState) => void; connected: boolean; onConnect: () => void }) {
   return (
     <div style={{ paddingTop: 40, paddingBottom: 60 }}>
       <h1 className="serif" style={{ fontSize: 28, fontWeight: 600, margin: "0 0 6px" }}>Markets</h1>
@@ -656,7 +703,7 @@ function Markets({ onOpenModal, connected, onConnect }) {
             <div className="num" style={{ color: C.fog }}>{fmtUSD(a.totalSupplied)}</div>
             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
               <button onClick={() => (connected ? onOpenModal({ mode: "supply", assetId: a.id }) : onConnect())} style={{ fontSize: 12, padding: "6px 11px", borderRadius: 6, border: `1px solid ${C.line2}`, background: "transparent", color: C.chalk, cursor: "pointer" }}>Supply</button>
-              {a.maxLTV > 0 && (
+              {a.isStable && (
                 <button onClick={() => (connected ? onOpenModal({ mode: "borrow", assetId: a.id }) : onConnect())} style={{ fontSize: 12, padding: "6px 11px", borderRadius: 6, border: `1px solid ${C.line2}`, background: "transparent", color: C.chalk, cursor: "pointer" }}>Borrow</button>
               )}
             </div>
@@ -668,7 +715,7 @@ function Markets({ onOpenModal, connected, onConnect }) {
 }
 
 // ---------------------------------------------------------------------------
-function Dashboard({ supplies, borrows, position, activity, connected, onConnect, onOpenModal }) {
+function Dashboard({ supplies, borrows, position, activity, connected, onConnect, onOpenModal }: { supplies: Balances; borrows: Balances; position: Position; activity: ActivityEntry[]; connected: boolean; onConnect: () => void; onOpenModal: (modal: ModalState) => void }) {
   if (!connected) {
     return (
       <div style={{ paddingTop: 80, paddingBottom: 80, textAlign: "center" }}>
@@ -743,7 +790,7 @@ function Dashboard({ supplies, borrows, position, activity, connected, onConnect
   );
 }
 
-function PositionPanel({ title, items, mode, onOpenModal }) {
+function PositionPanel({ title, items, mode, onOpenModal }: { title: string; items: [string, number][]; mode: ActionMode; onOpenModal: (modal: ModalState) => void }) {
   return (
     <div>
       <div style={{ fontSize: 12, color: C.fogDim, marginBottom: 10 }}>{title}</div>
@@ -770,7 +817,7 @@ function PositionPanel({ title, items, mode, onOpenModal }) {
   );
 }
 
-function HealthBar({ hf }) {
+function HealthBar({ hf }: { hf: number }) {
   const clamped = hf === Infinity ? 3 : Math.min(hf, 3);
   const widthPct = (clamped / 3) * 100;
   return (
@@ -781,7 +828,7 @@ function HealthBar({ hf }) {
   );
 }
 
-function Stat({ label, value, color }) {
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 16px" }}>
       <div style={{ fontSize: 11.5, color: C.fogDim, marginBottom: 6 }}>{label}</div>
@@ -791,7 +838,7 @@ function Stat({ label, value, color }) {
 }
 
 // ---------------------------------------------------------------------------
-function ActionModal({ asset, mode, position, supplies, borrows, onClose, onConfirm }) {
+function ActionModal({ asset, mode, position, supplies, borrows, onClose, onConfirm }: { asset: Asset; mode: ActionMode; position: Position; supplies: Balances; borrows: Balances; onClose: () => void; onConfirm: (amount: number) => void }) {
   const [amount, setAmount] = useState("");
   const numAmount = Number(amount) || 0;
   const valueUSD = numAmount * asset.price;
@@ -859,7 +906,7 @@ function ActionModal({ asset, mode, position, supplies, borrows, onClose, onConf
   );
 }
 
-function Row({ label, value, color }) {
+function Row({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
       <span style={{ color: C.fog }}>{label}</span>
