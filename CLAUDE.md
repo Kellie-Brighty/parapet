@@ -32,10 +32,19 @@ Front-end prototype only — no real wallet or chain calls, all data simulated.
 `computePosition(supplies, borrows)` in App.jsx is the real math: collateral value,
 borrow limit (value × maxLTV), liquidation value (value × liqThreshold), health factor
 (liqValue / borrowedValue), net APY. Any lending-related feature should extend this
-function rather than duplicating its logic elsewhere.
+function rather than duplicating its logic elsewhere. The same math is now mirrored
+on-chain — see `contracts/`.
+
+## Contracts
+A local, test-only Aave V3-based lending market lives in `contracts/` (Foundry).
+It lists reserves matching the `ASSETS` table in App.jsx exactly — USDG is the only
+borrowable asset, every stock/ETF is collateral-only. Not deployed anywhere live yet;
+see `contracts/script/ConfigureReserves.s.sol` for local/anvil deployment and
+`contracts/test/CrossCollateralHealthFactor.t.sol` for the parity tests against
+computePosition(). Run `forge test` from `contracts/` to verify.
 
 ## Known next steps
 - Wire a real wallet connector (wagmi/viem) for Robinhood Chain (chain ID 4663)
 - Replace hardcoded `ASSETS` array with a live price feed
 - Split App.jsx into per-component files
-- Build actual lending contracts (Morpho/Aave V3 fork is the fastest realistic path)
+- Get the contracts in `contracts/` reviewed/audited before any live deployment
